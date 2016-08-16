@@ -8,6 +8,7 @@ Inherits Application
 		  
 		  Sentry= new XojoSentry("INSERT DSN HERE")
 		  
+		  //this code is intended to generate an exception
 		  dim f as FolderItem
 		  dim x as String=f.DisplayName
 		End Sub
@@ -15,7 +16,7 @@ Inherits Application
 
 	#tag Event
 		Function UnhandledException(error As RuntimeException) As Boolean
-		  call Sentry.SubmitException(error,"Unhandled Exception","A description of the event")
+		  call Sentry.SubmitException(error,"Unhandled Exception",error.Message)
 		  
 		End Function
 	#tag EndEvent

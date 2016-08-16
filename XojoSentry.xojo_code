@@ -91,7 +91,7 @@ Protected Class XojoSentry
 	#tag EndMethod
 
 	#tag Method, Flags = &h0
-		Function SubmitException(mException as RuntimeException,currentFunction as String="", extra as String) As JSONItem
+		Function SubmitException(mException as RuntimeException,currentFunction as String, extra as String) As JSONItem
 		  dim sock as new HTTPSecureSocket
 		  sock.Address=uri
 		  Dim GMTZone As New xojo.core.TimeZone("GMT")
