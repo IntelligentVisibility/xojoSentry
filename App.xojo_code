@@ -16,7 +16,7 @@ Inherits Application
 
 	#tag Event
 		Function UnhandledException(error As RuntimeException) As Boolean
-		  call Sentry.SubmitException(error,"Unhandled Exception",error.Message)
+		  call Sentry.SubmitException(error,"Unhandled Exception",error.Message,"An error occured")
 		  
 		End Function
 	#tag EndEvent

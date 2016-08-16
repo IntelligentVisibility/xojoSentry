@@ -7,18 +7,29 @@ Protected Class XojoSentry
 	#tag EndMethod
 
 	#tag Method, Flags = &h21
-		Private Function GenerateJSON(mException as RuntimeException, currentFunction As String , extra as string="") As JSONItem
-		  dim stack() As xojo.Core.StackFrame=mException.CallStack
-		  dim stackText as String=currentFunction+mException.Reason+chr(10)
+		Private Function GenerateJSON(mException as RuntimeException, currentFunction As String , extra as string="", description as string) As JSONItem
 		  
-		  for Each frame as xojo.Core.StackFrame in stack
-		    stackText=stackText+frame.Name+chr(10)
+		  dim stack as new JSONItem
+		  'mException.Reason
+		  
+		  dim cstack() as xojo.Core.StackFrame=mException.CallStack
+		  for i as integer=cstack.Ubound downto 0
+		    dim frame as xojo.Core.StackFrame=cstack(i)
+		    dim jframe as new JSONItem
+		    dim fname as String=frame.Name
+		    jframe.Value("function")=fname
+		    jframe.Value("filename")=str(frame.Address)
+		    jframe.Value("module")="-"
+		    stack.Append jframe
 		  next
+		  dim stacktrace as new JSONItem
+		  stacktrace.Value("frames")=stack
 		  
 		  dim timestamp as string=d.Year.ToText+"-"+d.Month.ToText+"-"+d.Day.ToText+"T"+d.Hour.ToText+":"+d.Minute.ToText+":"+d.Minute.ToText
 		  dim j as new JSONItem
 		  j.Value("event_id")=GenerateUUID
-		  j.Value("message")=stacktext
+		  j.Value("message")=currentFunction+chr(10)+description
+		  j.Value("stacktrace")=stacktrace
 		  j.Value("timestamp")=timestamp
 		  j.Value("platform")="other"
 		  j.Value("release")=str(app.MajorVersion)+"."+str(app.MinorVersion)+"."+str(app.BugVersion)+"."+str(app.StageCode)
@@ -27,6 +38,23 @@ Protected Class XojoSentry
 		  tags.Value("culprit")=currentFunction
 		  j.Value("tags")=tags
 		  
+		  
+		  dim contexts as new JSONItem
+		  dim osinfo as new JSONItem
+		  #if TargetLinux
+		    osinfo.Value("name")="Linux"
+		  #elseif TargetMacOS
+		    osinfo.Value("name")="MacOS"
+		  #Elseif TargetWindows
+		    osinfo.Value("name")="Windows"
+		  #Endif
+		  contexts.Value("os")=osinfo
+		  
+		  dim runtime as new JSONItem
+		  runtime.Value("name")="Xojo"
+		  runtime.Value("version")=XojoVersionString
+		  contexts.Value("runtime")=runtime
+		  j.Value("contexts")=contexts
 		  Return j
 		End Function
 	#tag EndMethod
@@ -91,7 +119,7 @@ Protected Class XojoSentry
 	#tag EndMethod
 
 	#tag Method, Flags = &h0
-		Function SubmitException(mException as RuntimeException,currentFunction as String, extra as String) As JSONItem
+		Function SubmitException(mException as RuntimeException,currentFunction as String, extra as String, description as string="") As JSONItem
 		  dim sock as new HTTPSecureSocket
 		  sock.Address=uri
 		  Dim GMTZone As New xojo.core.TimeZone("GMT")
@@ -105,7 +133,7 @@ Protected Class XojoSentry
 		  
 		  sock.SetRequestHeader("User-Agent","Xojo-Sentry/"+Version)
 		  
-		  dim content as JSONItem=GenerateJSON(mException,currentFunction,extra)
+		  dim content as JSONItem=GenerateJSON(mException,currentFunction,extra,description)
 		  sock.SetRequestContent(content.ToString,"application/json")
 		  
 		  dim res as string = sock.SendRequest("POST",uri+"/api/"+ProjectID+"/store/"+header,100)
