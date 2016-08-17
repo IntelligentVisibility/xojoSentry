@@ -5,7 +5,7 @@ Inherits Application
 		Sub Open()
 		  
 		  
-		  
+		  //new XojoSentry instance for use throughout the application.
 		  Sentry= new XojoSentry("INSERT DSN HERE")
 		  
 		  //this code is intended to generate an exception

@@ -9,9 +9,8 @@ Protected Class XojoSentry
 	#tag Method, Flags = &h21
 		Private Function GenerateJSON(mException as RuntimeException, currentFunction As String , extra as string="", description as string) As JSONItem
 		  
+		  // build the stack frame array
 		  dim stack as new JSONItem
-		  'mException.Reason
-		  
 		  dim cstack() as xojo.Core.StackFrame=mException.CallStack
 		  for i as integer=cstack.Ubound downto 0
 		    dim frame as xojo.Core.StackFrame=cstack(i)
@@ -25,6 +24,7 @@ Protected Class XojoSentry
 		  dim stacktrace as new JSONItem
 		  stacktrace.Value("frames")=stack
 		  
+		  // add general info
 		  dim timestamp as string=d.Year.ToText+"-"+d.Month.ToText+"-"+d.Day.ToText+"T"+d.Hour.ToText+":"+d.Minute.ToText+":"+d.Minute.ToText
 		  dim j as new JSONItem
 		  j.Value("event_id")=GenerateUUID
@@ -38,18 +38,41 @@ Protected Class XojoSentry
 		  tags.Value("culprit")=currentFunction
 		  j.Value("tags")=tags
 		  
-		  
+		  //add os version info
 		  dim contexts as new JSONItem
 		  dim osinfo as new JSONItem
+		  dim sh as new Shell
 		  #if TargetLinux
-		    osinfo.Value("name")="Linux"
+		    sh.Execute("lsb_release", "-is")
+		    osinfo.Value("name")=sh.Result
+		    sh.Execute("lsb_release", "-rs")
+		    osinfo.Value("version")=sh.Result
 		  #elseif TargetMacOS
 		    osinfo.Value("name")="MacOS"
+		    sh.Execute("sw_vers -productVersion")
+		    osinfo.Value("version")=sh.Result
 		  #Elseif TargetWindows
 		    osinfo.Value("name")="Windows"
+		    //hoops to get win os version
+		    declare Function GetFileVersionInfoA lib "Api-ms-win-core-version-l1-1-0.dll" (filename as cstring,handle as uint32,len as uint32,p as ptr) as Boolean
+		    declare Function GetFileVersionInfoSizeA lib "Api-ms-win-core-version-l1-1-0.dll" (filename as cstring,byref o as uint32) as uint32
+		    declare Function VerQueryValueA lib "Api-ms-win-core-version-l1-1-0.dll" (block as ptr,name  as cstring,byref buffer as ptr,byref sze as uint32) as Boolean
+		    dim o as uint32
+		    dim s as uint32=GetFileVersionInfoSizeA("user32.dll",o)
+		    dim v as new MemoryBlock(s)
+		    dim r as ptr
+		    v.UInt32Value(0)=s
+		    if GetFileVersionInfoA("User32.dll",0,s,v) then
+		      if VerQueryValueA(v,"\",r,o) then
+		        dim res as MemoryBlock=r
+		        osinfo.Value("version")=str(res.UInt16Value(18))+"."+str(res.UInt16Value(16))+" "+str(res.UInt16Value(22))+"."+str(res.UInt16Value(20))
+		      end if
+		    end if
 		  #Endif
+		  
 		  contexts.Value("os")=osinfo
 		  
+		  //info about the version of Xojo
 		  dim runtime as new JSONItem
 		  runtime.Value("name")="Xojo"
 		  runtime.Value("version")=XojoVersionString
@@ -106,6 +129,7 @@ Protected Class XojoSentry
 
 	#tag Method, Flags = &h21
 		Private Sub ParseDSN(dsn as text)
+		  //break out the DSN into the needed parts
 		  dim r as new RegEx
 		  r.SearchPattern="(.*):\/\/(.*)\:(.*)\@(.*)\/(.*)"
 		  
@@ -120,11 +144,15 @@ Protected Class XojoSentry
 
 	#tag Method, Flags = &h0
 		Function SubmitException(mException as RuntimeException,currentFunction as String, extra as String, description as string="") As JSONItem
+		  //We use  HTTPS
 		  dim sock as new HTTPSecureSocket
 		  sock.Address=uri
+		  
+		  //Grab the current time in GMT
 		  Dim GMTZone As New xojo.core.TimeZone("GMT")
 		  d=new xojo.core.date(xojo.Core.Date.now.SecondsFrom1970,GMTZone)
 		  
+		  //Build the header to submit
 		  dim header as String
 		  header="?sentry_version=7&sentry_client=Xojo-Sentry/"+Version+"&" + _
 		  "sentry_timestamp="+Format(d.SecondsFrom1970,"#######")+"&" + _
@@ -133,14 +161,16 @@ Protected Class XojoSentry
 		  
 		  sock.SetRequestHeader("User-Agent","Xojo-Sentry/"+Version)
 		  
+		  //Create the JSONItem that contains all the relevalt data
 		  dim content as JSONItem=GenerateJSON(mException,currentFunction,extra,description)
 		  sock.SetRequestContent(content.ToString,"application/json")
 		  
+		  //send off the report
 		  dim res as string = sock.SendRequest("POST",uri+"/api/"+ProjectID+"/store/"+header,100)
 		  if sock.ErrorCode=0 then
-		    Return new JSONItem(res)
+		    Return new JSONItem(res) //contains a report id
 		  else
-		    Return content
+		    Return content //Something failed.. we could save this for submission on next run
 		  end if
 		End Function
 	#tag EndMethod
